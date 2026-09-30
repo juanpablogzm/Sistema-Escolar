@@ -256,6 +256,27 @@ body {
   gap: 8px;
 }
 
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sync-status-synced { color: #047857; background: #d1fae5; }
+.sync-status-pending { color: #b45309; background: #fef3c7; }
+.sync-status-offline { color: #b91c1c; background: #fee2e2; }
+.sync-status-local { color: #6d28d9; background: #ede9fe; }
+
+@media (max-width: 575.98px) {
+  .sync-status span { display: none; }
+  .sync-status { padding: 8px; }
+}
+
 .notification-btn {
   position: relative;
   color: var(--text-secondary);

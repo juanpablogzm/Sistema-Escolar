@@ -1,5 +1,9 @@
 import { initializeApp } from 'firebase/app'
-import { getFirestore } from 'firebase/firestore'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager
+} from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 
 // TODO: Reemplaza estos valores con la configuración de tu proyecto de Firebase
@@ -15,5 +19,13 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig)
-export const db = getFirestore(app)
+// Firestore guarda una copia local del navegador en IndexedDB. Las lecturas
+// y escrituras siguen funcionando sin red y Firebase envía la cola pendiente al
+// recuperar la conexión. El gestor multi-pestaña evita que abrir la aplicación
+// dos veces deje a una de las pestañas sin caché persistente.
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+})
 export const auth = getAuth(app)

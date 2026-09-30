@@ -28,6 +28,8 @@ export const AppProvider = ({ children }) => {
   const [grades, setGrades] = useState([])
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine)
+  const [collectionSync, setCollectionSync] = useState({})
   const [theme, setTheme] = useState(getInitialTheme)
 
   useEffect(() => {
@@ -39,7 +41,19 @@ export const AppProvider = ({ children }) => {
 
   const userId = user?.uid
 
-// Real-time listeners
+  useEffect(() => {
+    const markOnline = () => setIsOnline(true)
+    const markOffline = () => setIsOnline(false)
+    window.addEventListener('online', markOnline)
+    window.addEventListener('offline', markOffline)
+    return () => {
+      window.removeEventListener('online', markOnline)
+      window.removeEventListener('offline', markOffline)
+    }
+  }, [])
+
+  // Firestore emite primero los datos de IndexedDB y después los del servidor.
+  // Así la pantalla queda disponible aun si el dispositivo arranca sin señal.
   useEffect(() => {
     if (!userId) {
       setUniversities([])
@@ -48,42 +62,54 @@ export const AppProvider = ({ children }) => {
       setRubrics([])
       setGrades([])
       setAttendance([])
+      setCollectionSync({})
       setLoading(false)
       return
     }
 
-    let loaded = 0
-    const total = 6
+    setLoading(true)
+    const loadedCollections = new Set()
     const checkLoaded = () => {
-      loaded++
-      if (loaded >= total) setLoading(false)
+      if (loadedCollections.size >= 6) setLoading(false)
     }
 
     const collections = [
       'universities', 'classes', 'students', 'rubrics', 'grades', 'attendance'
     ]
     
-    const unsubs = []
-    collections.forEach((name, index) => {
-      // Stagger listeners by 200ms to avoid overwhelming Firestore
-      setTimeout(() => {
-        const unsub = subscribeCollection(name, userId, (data) => {
-          if (name === 'universities') setUniversities(data)
-          if (name === 'classes') setClasses(data)
-          if (name === 'students') setStudents(data)
-          if (name === 'rubrics') setRubrics(data)
-          if (name === 'grades') setGrades(data)
-          if (name === 'attendance') setAttendance(data)
-          checkLoaded()
-        })
-        unsubs.push(unsub)
-      }, index * 200)
+    const unsubs = collections.map((name) => {
+      return subscribeCollection(name, userId, (data, metadata) => {
+        if (name === 'universities') setUniversities(data)
+        if (name === 'classes') setClasses(data)
+        if (name === 'students') setStudents(data)
+        if (name === 'rubrics') setRubrics(data)
+        if (name === 'grades') setGrades(data)
+        if (name === 'attendance') setAttendance(data)
+        setCollectionSync(prev => ({ ...prev, [name]: metadata }))
+        loadedCollections.add(name)
+        checkLoaded()
+      }, () => {
+        // Un error de red o permisos no debe dejar la aplicación bloqueada.
+        loadedCollections.add(name)
+        checkLoaded()
+      })
     })
 
     return () => {
       unsubs.forEach(unsub => unsub())
     }
   }, [userId])
+
+  const syncMetadata = Object.values(collectionSync)
+  const hasPendingWrites = syncMetadata.some(status => status.hasPendingWrites)
+  const usingCache = syncMetadata.length > 0 && syncMetadata.every(status => status.fromCache)
+  const syncStatus = !isOnline
+    ? 'offline'
+    : hasPendingWrites
+      ? 'pending'
+      : usingCache
+        ? 'local'
+        : 'synced'
 
   // University CRUD
   const addUniversity = async (university) => {
@@ -219,6 +245,7 @@ export const AppProvider = ({ children }) => {
 
   const value = {
     universities, classes, students, rubrics, grades, attendance, loading,
+    syncStatus, isOnline, hasPendingWrites,
     theme, toggleTheme,
     addUniversity, updateUniversity, deleteUniversity,
     addClass, updateClass, deleteClass,

@@ -10,14 +10,10 @@ import {
 import {
   doc,
   setDoc,
-  updateDoc,
-  deleteDoc,
-  collection,
-  query,
-  where,
-  getDocs,
+  getDoc,
   serverTimestamp
 } from 'firebase/firestore'
+import { deleteDocument, updateDocument } from '../services/firestoreService'
 
 const AuthContext = createContext()
 
@@ -46,11 +42,9 @@ export const AuthProvider = ({ children }) => {
 
   const getUserProfile = async (uid) => {
     try {
-      await new Promise(r => setTimeout(r, 300))
-      const q = query(collection(db, 'users'), where('__name__', '==', uid))
-      const snapshot = await getDocs(q)
-      if (!snapshot.empty) {
-        return { uid, ...snapshot.docs[0].data() }
+      const snapshot = await getDoc(doc(db, 'users', uid))
+      if (snapshot.exists()) {
+        return { uid, ...snapshot.data() }
       }
       return null
     } catch (err) {
@@ -112,7 +106,7 @@ export const AuthProvider = ({ children }) => {
   const deleteUser = async (uid) => {
     if (!isAdmin()) throw new Error('No autorizado')
     if (uid === user.uid) throw new Error('No puedes eliminarte a ti mismo')
-    await deleteDoc(doc(db, 'users', uid))
+    await deleteDocument('users', uid)
     // Note: Firebase Auth user deletion requires Admin SDK (backend)
     // For now we mark as deleted in Firestore
   }
@@ -120,7 +114,7 @@ export const AuthProvider = ({ children }) => {
   const suspendUser = async (uid, suspend) => {
     if (!isAdmin()) throw new Error('No autorizado')
     if (uid === user.uid) throw new Error('No puedes suspenderte a ti mismo')
-    await updateDoc(doc(db, 'users', uid), {
+    await updateDocument('users', uid, {
       status: suspend ? 'suspended' : 'active',
       updatedAt: serverTimestamp()
     })
@@ -128,7 +122,7 @@ export const AuthProvider = ({ children }) => {
 
   const approveUser = async (uid) => {
     if (!isAdmin()) throw new Error('No autorizado')
-    await updateDoc(doc(db, 'users', uid), {
+    await updateDocument('users', uid, {
       status: 'active',
       updatedAt: serverTimestamp()
     })

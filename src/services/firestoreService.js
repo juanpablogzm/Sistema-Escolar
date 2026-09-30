@@ -1,14 +1,14 @@
 import {
   collection,
   doc,
-  addDoc,
   updateDoc,
   deleteDoc,
   query,
   where,
   writeBatch,
   serverTimestamp,
-  getDocs
+  onSnapshot,
+  setDoc
 } from 'firebase/firestore'
 import { db } from '../firebase'
 
@@ -17,55 +17,63 @@ const col = (name) => collection(db, name)
 
 // ---------- Generic CRUD ----------
 
-export const subscribeCollection = (collectionName, userId, callback) => {
-  const fetchData = async () => {
-    try {
-      await new Promise(r => setTimeout(r, 200))
-      const q = userId ? query(col(collectionName), where('userId', '==', userId)) : query(col(collectionName))
-      const snapshot = await getDocs(q)
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-      callback(data)
-    } catch (err) {
-      console.error(`Error cargando ${collectionName}:`, err)
-    }
-  }
-  fetchData()
-  return () => {}
+export const subscribeCollection = (collectionName, userId, callback, onError) => {
+  const q = userId
+    ? query(col(collectionName), where('userId', '==', userId))
+    : query(col(collectionName))
+
+  return onSnapshot(q, { includeMetadataChanges: true }, (snapshot) => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+    callback(data, {
+      fromCache: snapshot.metadata.fromCache,
+      hasPendingWrites: snapshot.metadata.hasPendingWrites
+    })
+  }, (err) => {
+    console.error(`Error sincronizando ${collectionName}:`, err)
+    onError?.(err)
+  })
 }
 
-export const subscribeAll = (collectionName, callback) => {
-  const fetchData = async () => {
-    try {
-      await new Promise(r => setTimeout(r, 200))
-      const snapshot = await getDocs(col(collectionName))
-      const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
-      callback(data)
-    } catch (err) {
-      console.error(`Error cargando ${collectionName}:`, err)
-    }
-  }
-  fetchData()
-  return () => {}
+export const subscribeAll = (collectionName, callback, onError) => {
+  return onSnapshot(col(collectionName), { includeMetadataChanges: true }, (snapshot) => {
+    const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() }))
+    callback(data, {
+      fromCache: snapshot.metadata.fromCache,
+      hasPendingWrites: snapshot.metadata.hasPendingWrites
+    })
+  }, (err) => {
+    console.error(`Error sincronizando ${collectionName}:`, err)
+    onError?.(err)
+  })
+}
+
+// Las promesas de Firestore se resuelven al confirmar el servidor. No las
+// esperamos aquí: sin señal el cambio ya está aplicado a IndexedDB y la UI debe
+// poder continuar. Si el servidor lo rechaza, Firestore revierte el cambio local.
+const queueWrite = (operation, label) => {
+  operation.catch((err) => console.error(`No se pudo sincronizar ${label}:`, err))
+  return Promise.resolve()
 }
 
 export const addDocument = async (collectionName, data, userId) => {
   const { id, ...rest } = data
-  const docRef = await addDoc(col(collectionName), {
+  const docRef = doc(col(collectionName))
+  queueWrite(setDoc(docRef, {
     ...rest,
     userId,
     createdAt: serverTimestamp()
-  })
+  }), `nuevo documento en ${collectionName}`)
   return docRef.id
 }
 
 export const updateDocument = async (collectionName, id, data) => {
   const docRef = doc(db, collectionName, id)
-  await updateDoc(docRef, data)
+  return queueWrite(updateDoc(docRef, data), `cambios en ${collectionName}`)
 }
 
 export const deleteDocument = async (collectionName, id) => {
   const docRef = doc(db, collectionName, id)
-  await deleteDoc(docRef)
+  return queueWrite(deleteDoc(docRef), `eliminación en ${collectionName}`)
 }
 
 // ---------- Batch delete helpers ----------
@@ -79,5 +87,5 @@ export const batchDeleteDocs = async (collectionName, ids) => {
   if (ids.length === 0) return
   const batch = writeBatch(db)
   ids.forEach(id => batch.delete(doc(db, collectionName, id)))
-  await batch.commit()
+  return queueWrite(batch.commit(), `eliminaciones en ${collectionName}`)
 }

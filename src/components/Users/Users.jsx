@@ -29,7 +29,7 @@ const Users = () => {
     const unsub = subscribeAll('users', (data) => {
       setUsers(data.filter(u => u.uid !== user?.uid))
       setLoading(false)
-    })
+    }, () => setLoading(false))
     return () => unsub()
   }, [isAdmin, user])
 
