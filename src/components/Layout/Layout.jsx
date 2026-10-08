@@ -58,6 +58,11 @@ const Layout = () => {
         <div className="content-area">
           <Outlet />
         </div>
+        <footer className="app-footer">
+          <span>ClassRoom</span>
+          <span className="app-footer-separator" aria-hidden="true">•</span>
+          <span>Versión 1</span>
+        </footer>
       </main>
     </div>
   )

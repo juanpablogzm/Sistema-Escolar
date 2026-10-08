@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext'
 import * as XLSX from 'xlsx'
 import {
   BsPlus, BsCalendarCheck, BsCheckCircleFill, BsXCircleFill,
-  BsClockFill, BsFileEarmarkTextFill, BsTrash, BsPencil, BsDownload
+  BsClockFill, BsFileEarmarkTextFill, BsTrash, BsPencil, BsDownload, BsSearch
 } from 'react-icons/bs'
 
 const STATUS_CONFIG = {
@@ -43,6 +43,8 @@ const Attendance = () => {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [collapseLegend, setCollapseLegend] = useState(false)
   const [collapseTable, setCollapseTable] = useState(false)
+  const [studentSearch, setStudentSearch] = useState('')
+  const [sessionStudentSearch, setSessionStudentSearch] = useState('')
 
   const availableClasses = filterUni === 'all'
     ? classes
@@ -60,6 +62,41 @@ const Attendance = () => {
     [attendance, selectedClassId]
   )
 
+  const filteredClassStudents = useMemo(() => {
+    const term = studentSearch.trim().toLocaleLowerCase('es-MX')
+    if (!term) return classStudents
+
+    return classStudents.filter(student =>
+      student.name?.toLocaleLowerCase('es-MX').includes(term) ||
+      String(student.matricula || '').toLocaleLowerCase('es-MX').includes(term)
+    )
+  }, [classStudents, studentSearch])
+
+  const matchingStudents = useMemo(() => {
+    const term = studentSearch.trim().toLocaleLowerCase('es-MX')
+    if (!term) return []
+    const availableClassIds = new Set(availableClasses.map(item => item.id))
+
+    return students
+      .filter(student => availableClassIds.has(student.classId))
+      .filter(student =>
+        student.name?.toLocaleLowerCase('es-MX').includes(term) ||
+        String(student.matricula || '').toLocaleLowerCase('es-MX').includes(term)
+      )
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  }, [availableClasses, students, studentSearch])
+
+  const filteredSessionRecords = useMemo(() => {
+    const term = sessionStudentSearch.trim().toLocaleLowerCase('es-MX')
+    if (!term) return sessionRecords
+
+    return sessionRecords.filter(record => {
+      const student = classStudents.find(item => item.id === record.studentId)
+      return student?.name?.toLocaleLowerCase('es-MX').includes(term) ||
+        String(student?.matricula || '').toLocaleLowerCase('es-MX').includes(term)
+    })
+  }, [classStudents, sessionRecords, sessionStudentSearch])
+
   // Open modal to create new session
   const handleNewSession = () => {
     const today = new Date().toISOString().split('T')[0]
@@ -68,6 +105,7 @@ const Attendance = () => {
     setSessionRecords(
       classStudents.map(s => ({ studentId: s.id, status: 'present' }))
     )
+    setSessionStudentSearch('')
     setShowSessionModal(true)
   }
 
@@ -84,6 +122,7 @@ const Attendance = () => {
         status: existingMap[s.id] || 'present'
       }))
     )
+    setSessionStudentSearch('')
     setShowSessionModal(true)
   }
 
@@ -93,6 +132,7 @@ const Attendance = () => {
     setEditingSession(null)
     setSessionRecords([])
     setSessionDate('')
+    setSessionStudentSearch('')
   }
 
   const handleTryClose = () => setShowCloseConfirm(true)
@@ -311,14 +351,69 @@ const Attendance = () => {
             )
           })}
         </Form.Select>
+        <div className="search-box" style={{ maxWidth: 280 }}>
+          <BsSearch className="search-icon" />
+          <input
+            type="search"
+            className="form-control"
+            placeholder="Buscar alumno o matrícula..."
+            value={studentSearch}
+            onChange={e => setStudentSearch(e.target.value)}
+            aria-label="Buscar alumno en asistencia"
+          />
+        </div>
       </div>
 
       {!selectedClassId ? (
-        <div className="empty-state">
-          <div className="empty-icon">📋</div>
-          <h5>Selecciona una clase</h5>
-          <p>Elige una clase para ver y registrar asistencias</p>
-        </div>
+        studentSearch.trim() ? (
+          matchingStudents.length > 0 ? (
+            <div className="custom-card">
+              <div className="card-body-custom p-0">
+                <div className="table-scroll-container">
+                  <table className="custom-table">
+                    <thead>
+                      <tr>
+                        <th>Alumno</th>
+                        <th>Matrícula</th>
+                        <th>Clase</th>
+                        <th style={{ width: 160 }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matchingStudents.map(student => {
+                        const cls = classes.find(item => item.id === student.classId)
+                        return (
+                          <tr key={student.id}>
+                            <td><strong>{student.name}</strong></td>
+                            <td><code>{student.matricula}</code></td>
+                            <td>{cls?.name || 'Sin clase'}</td>
+                            <td>
+                              <button className="btn btn-sm btn-outline-custom" onClick={() => setSelectedClassId(student.classId)}>
+                                Ver asistencia
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <div className="empty-icon">🔎</div>
+              <h5>No se encontraron alumnos</h5>
+              <p>Intenta con otro nombre o matrícula.</p>
+            </div>
+          )
+        ) : (
+          <div className="empty-state">
+            <div className="empty-icon">📋</div>
+            <h5>Selecciona una clase o busca un alumno</h5>
+            <p>Usa el buscador para localizar la asistencia de un alumno sin elegir primero su grupo.</p>
+          </div>
+        )
       ) : classStudents.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">👥</div>
@@ -431,7 +526,7 @@ const Attendance = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {classStudents.map(student => {
+                      {filteredClassStudents.map(student => {
                         const stats = studentStats[student.id] || { present: 0, absent: 0, late: 0, justified: 0, total: 0 }
                         const pct = stats.total > 0
                           ? Math.round(((stats.present + stats.justified + stats.late * 0.5) / stats.total) * 100)
@@ -492,6 +587,13 @@ const Attendance = () => {
                           </tr>
                         )
                       })}
+                      {filteredClassStudents.length === 0 && (
+                        <tr>
+                          <td colSpan={classSessions.length + 2} className="text-center py-4 text-muted">
+                            No se encontraron alumnos con esa búsqueda.
+                          </td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -538,6 +640,18 @@ const Attendance = () => {
             ))}
           </div>
 
+          <div className="search-box mb-3" style={{ maxWidth: 360 }}>
+            <BsSearch className="search-icon" />
+            <input
+              type="search"
+              className="form-control"
+              placeholder="Buscar alumno o matrícula..."
+              value={sessionStudentSearch}
+              onChange={e => setSessionStudentSearch(e.target.value)}
+              aria-label="Buscar alumno para registrar asistencia"
+            />
+          </div>
+
           <div className="table-scroll-container" style={{ maxHeight: 400, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
             <table className="custom-table" style={{ margin: 0 }}>
               <thead>
@@ -549,7 +663,7 @@ const Attendance = () => {
                 </tr>
               </thead>
               <tbody>
-                {sessionRecords.map((rec, i) => {
+                {filteredSessionRecords.map((rec, i) => {
                   const student = classStudents.find(s => s.id === rec.studentId)
                   if (!student) return null
                   const cfg = STATUS_CONFIG[rec.status]
@@ -585,6 +699,13 @@ const Attendance = () => {
                     </tr>
                   )
                 })}
+                {filteredSessionRecords.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="text-center py-4 text-muted">
+                      No se encontraron alumnos con esa búsqueda.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

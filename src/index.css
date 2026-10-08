@@ -275,6 +275,12 @@ body {
 @media (max-width: 575.98px) {
   .sync-status span { display: none; }
   .sync-status { padding: 8px; }
+
+  .app-footer {
+    min-height: 48px;
+    padding: 10px 16px;
+    font-size: 11px;
+  }
 }
 
 .notification-btn {
@@ -303,6 +309,24 @@ body {
 .content-area {
   padding: 24px;
   flex: 1;
+}
+
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 12px 24px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  background: var(--bg-card);
+}
+
+.app-footer span:first-child {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 
 /* ===== PAGE HEADER ===== */
