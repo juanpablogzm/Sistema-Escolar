@@ -1,6 +1,26 @@
-const CACHE_NAME = 'classroom-app-shell-v1'
+const CACHE_NAME = 'classroom-app-shell-v2'
 const APP_SHELL = new URL('./', self.registration.scope).href
 const INDEX_PAGE = new URL('./index.html', self.registration.scope).href
+const STATIC_DESTINATIONS = new Set(['script', 'style', 'image', 'font', 'manifest', 'worker'])
+const isStaticAsset = (request) => STATIC_DESTINATIONS.has(request.destination)
+
+// A Response body is a one-shot stream. Clone it before returning it to the
+// browser, since the browser may begin consuming the returned response right
+// away. If it has already been consumed, simply skip caching that response.
+const cacheResponse = (request, response) => {
+  if (!response.ok || response.bodyUsed) return
+
+  let copy
+  try {
+    copy = response.clone()
+  } catch {
+    return
+  }
+
+  caches.open(CACHE_NAME)
+    .then((cache) => cache.put(request, copy))
+    .catch(() => {})
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -24,7 +44,8 @@ self.addEventListener('message', (event) => {
   if (event.data?.type !== 'CACHE_URLS' || !Array.isArray(event.data.urls)) return
   const urls = event.data.urls.filter((url) => {
     const parsed = new URL(url)
-    return parsed.origin === self.location.origin
+    return parsed.origin === self.location.origin &&
+      /\.(?:css|js|mjs|png|jpe?g|webp|svg|ico|woff2?|ttf|json)$/i.test(parsed.pathname)
   })
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(urls)))
 })
@@ -38,8 +59,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy))
+          cacheResponse(request, response)
           return response
         })
         .catch(() => caches.match(request).then((cached) => cached || caches.match(APP_SHELL)))
@@ -47,11 +67,15 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // Only application files belong in this cache. API and other dynamic
+  // requests must reach the network untouched, especially after login.
+  if (!isStaticAsset(request)) return
+
   event.respondWith(
     caches.match(request).then((cached) => {
       const network = fetch(request).then((response) => {
         if (response.ok) {
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()))
+          cacheResponse(request, response)
         }
         return response
       })
