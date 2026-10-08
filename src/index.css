@@ -1178,6 +1178,11 @@ body {
   background: var(--bg-main);
 }
 
+[data-theme="dark"] .form-control::placeholder {
+  color: #94A3B8;
+  opacity: 1;
+}
+
 [data-theme="dark"] .modal-content {
   background: var(--bg-card);
   color: var(--text-primary);

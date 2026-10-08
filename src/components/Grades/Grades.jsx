@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { Form, Modal, Button } from 'react-bootstrap'
 import { useApp } from '../../context/AppContext'
-import { BsSave, BsCheckCircle, BsDownload, BsSliders, BsGlobeAmericas, BsUpload } from 'react-icons/bs'
+import { BsSave, BsCheckCircle, BsDownload, BsSliders, BsGlobeAmericas, BsUpload, BsSearch } from 'react-icons/bs'
 import * as XLSX from 'xlsx'
 
 const Grades = () => {
@@ -9,6 +9,7 @@ const Grades = () => {
   const [selectedUniversity, setSelectedUniversity] = useState('')
   const [selectedClass, setSelectedClass] = useState('')
   const [selectedRubric, setSelectedRubric] = useState('')
+  const [studentSearch, setStudentSearch] = useState('')
   const [localGrades, setLocalGrades] = useState({})
   const [localSubSelections, setLocalSubSelections] = useState({})
   const [saved, setSaved] = useState(false)
@@ -35,6 +36,14 @@ const Grades = () => {
   const classObj = useMemo(() => classes.find(c => c.id === selectedClass), [classes, selectedClass])
   const rubricObj = useMemo(() => rubrics.find(r => r.id === selectedRubric), [rubrics, selectedRubric])
   const classStudents = useMemo(() => students.filter(s => s.classId === selectedClass), [students, selectedClass])
+  const visibleClassStudents = useMemo(() => {
+    const term = studentSearch.trim().toLocaleLowerCase('es-MX')
+    if (!term) return classStudents
+    return classStudents.filter(student =>
+      student.name?.toLocaleLowerCase('es-MX').includes(term) ||
+      String(student.matricula || '').toLocaleLowerCase('es-MX').includes(term)
+    )
+  }, [classStudents, studentSearch])
   const classRubrics = useMemo(() => rubrics.filter(r => (r.classIds || (r.classId ? [r.classId] : [])).includes(selectedClass)), [rubrics, selectedClass])
   const uni = useMemo(() => classObj ? universities.find(u => u.id === classObj.universityId) : null, [universities, classObj])
 
@@ -433,6 +442,19 @@ const Grades = () => {
             ))}
           </Form.Select>
         )}
+        {selectedClass && (
+          <div className="search-box" style={{ maxWidth: 280 }}>
+            <BsSearch className="search-icon" />
+            <input
+              type="search"
+              className="form-control"
+              placeholder="Buscar alumno o matrícula..."
+              value={studentSearch}
+              onChange={e => setStudentSearch(e.target.value)}
+              aria-label="Buscar alumno en calificaciones"
+            />
+          </div>
+        )}
       </div>
 
       {!selectedUniversity ? (
@@ -527,7 +549,7 @@ const Grades = () => {
                 </tr>
               </thead>
               <tbody>
-                {classStudents.map(student => {
+                {visibleClassStudents.map(student => {
                   const finalGrade = calculateFinalGrade(student.id)
                   return (
                     <tr key={student.id}>
@@ -630,6 +652,13 @@ const Grades = () => {
                     </tr>
                   )
                 })}
+                {visibleClassStudents.length === 0 && (
+                  <tr>
+                    <td colSpan={rubricObj.criteria.length + 2} className="text-center py-4 text-muted">
+                      No se encontraron alumnos con esa búsqueda.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

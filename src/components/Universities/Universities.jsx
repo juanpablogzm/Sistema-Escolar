@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Row, Col, Modal, Form, Button } from 'react-bootstrap'
 import { useApp } from '../../context/AppContext'
-import { BsPlus, BsPencil, BsTrash, BsBook, BsPeople } from 'react-icons/bs'
+import { BsPlus, BsPencil, BsTrash, BsBook, BsPeople, BsSearch } from 'react-icons/bs'
 
 const COLORS = [
   '#E91E86', '#F472B6', '#10B981', '#F59E0B', '#EC4899',
@@ -15,6 +15,7 @@ const Universities = () => {
   const [editingUni, setEditingUni] = useState(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [searchTerm, setSearchTerm] = useState('')
   const [form, setForm] = useState({
     name: '', abbreviation: '', color: COLORS[0], icon: ICONS[0]
   })
@@ -55,6 +56,12 @@ const Universities = () => {
     return { classCount: uniClasses.length, studentCount: uniStudents.length }
   }
 
+  const filteredUniversities = universities.filter(uni => {
+    const term = searchTerm.trim().toLocaleLowerCase('es-MX')
+    return !term || uni.name?.toLocaleLowerCase('es-MX').includes(term) ||
+      uni.abbreviation?.toLocaleLowerCase('es-MX').includes(term)
+  })
+
   return (
     <div className="fade-in">
       <div className="page-header">
@@ -67,18 +74,36 @@ const Universities = () => {
         </button>
       </div>
 
-      {universities.length === 0 ? (
+      {universities.length > 0 && (
+        <div className="filter-bar">
+          <div className="search-box" style={{ maxWidth: 320 }}>
+            <BsSearch className="search-icon" />
+            <input
+              type="search"
+              className="form-control"
+              placeholder="Buscar universidad o siglas..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              aria-label="Buscar universidades"
+            />
+          </div>
+        </div>
+      )}
+
+      {filteredUniversities.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">🏛️</div>
-          <h5>No hay universidades registradas</h5>
-          <p>Comienza agregando las universidades donde impartes tus clases</p>
-          <button className="btn btn-primary-custom" onClick={() => setShowModal(true)}>
-            <BsPlus size={20} /> Agregar Universidad
-          </button>
+          <h5>{searchTerm ? 'No se encontraron universidades' : 'No hay universidades registradas'}</h5>
+          <p>{searchTerm ? 'Intenta con otro término de búsqueda.' : 'Comienza agregando las universidades donde impartes tus clases'}</p>
+          {!searchTerm && (
+            <button className="btn btn-primary-custom" onClick={() => setShowModal(true)}>
+              <BsPlus size={20} /> Agregar Universidad
+            </button>
+          )}
         </div>
       ) : (
         <Row className="g-3">
-          {universities.map((uni, i) => {
+          {filteredUniversities.map((uni, i) => {
             const stats = getUniStats(uni.id)
             return (
               <Col key={uni.id} md={6} lg={4}>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Row, Col, Modal, Form, Button } from 'react-bootstrap'
 import { useApp } from '../../context/AppContext'
-import { BsPlus, BsPencil, BsTrash, BsTrophy, BsCalendarCheck, BsSliders, BsGlobeAmericas } from 'react-icons/bs'
+import { BsPlus, BsPencil, BsTrash, BsTrophy, BsCalendarCheck, BsSliders, BsGlobeAmericas, BsSearch } from 'react-icons/bs'
 import { v4 as uuidv4 } from 'uuid'
 
 const CRITERION_COLORS = ['#E91E86', '#F472B6', '#10B981', '#F59E0B', '#EC4899', '#BE185D', '#F9A8D4', '#14B8A6']
@@ -14,6 +14,7 @@ const Rubrics = () => {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [showSubCloseConfirm, setShowSubCloseConfirm] = useState(false)
   const [filterClass, setFilterClass] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
   const [form, setForm] = useState({
     classIds: [],
     name: '',
@@ -27,9 +28,21 @@ const Rubrics = () => {
 
   const getRubricClassIds = (r) => r.classIds || (r.classId ? [r.classId] : [])
 
-  const filteredRubrics = filterClass === 'all'
+  let filteredRubrics = filterClass === 'all'
     ? rubrics
     : rubrics.filter(r => getRubricClassIds(r).includes(filterClass))
+  if (searchTerm.trim()) {
+    const term = searchTerm.trim().toLocaleLowerCase('es-MX')
+    filteredRubrics = filteredRubrics.filter(rubric => {
+      const classNames = getRubricClassIds(rubric)
+        .map(id => classes.find(cls => cls.id === id)?.name || '')
+        .join(' ')
+      const criteriaNames = (rubric.criteria || []).map(criterion => criterion.name || '').join(' ')
+      return rubric.name?.toLocaleLowerCase('es-MX').includes(term) ||
+        classNames.toLocaleLowerCase('es-MX').includes(term) ||
+        criteriaNames.toLocaleLowerCase('es-MX').includes(term)
+    })
+  }
 
   // Get non-final rubrics that share at least one class with current form (to reference in final rubric)
   const availableParciales = rubrics.filter(r =>
@@ -264,16 +277,29 @@ const Rubrics = () => {
             )
           })}
         </Form.Select>
+        <div className="search-box" style={{ maxWidth: 300 }}>
+          <BsSearch className="search-icon" />
+          <input
+            type="search"
+            className="form-control"
+            placeholder="Buscar rúbrica o criterio..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Buscar rúbricas"
+          />
+        </div>
       </div>
 
       {filteredRubrics.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">📋</div>
-          <h5>No hay rúbricas creadas</h5>
-          <p>Crea rúbricas con criterios de evaluación para calificar a tus alumnos</p>
-          <button className="btn btn-primary-custom" onClick={() => setShowModal(true)}>
-            <BsPlus size={20} /> Crear Rúbrica
-          </button>
+          <h5>{searchTerm ? 'No se encontraron rúbricas' : 'No hay rúbricas creadas'}</h5>
+          <p>{searchTerm ? 'Intenta con otro término de búsqueda.' : 'Crea rúbricas con criterios de evaluación para calificar a tus alumnos'}</p>
+          {!searchTerm && (
+            <button className="btn btn-primary-custom" onClick={() => setShowModal(true)}>
+              <BsPlus size={20} /> Crear Rúbrica
+            </button>
+          )}
         </div>
       ) : (
         <Row className="g-3">

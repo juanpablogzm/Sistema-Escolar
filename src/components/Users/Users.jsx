@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../../context/AuthContext'
 import { Row, Col, Modal, Form, Button, OverlayTrigger, Tooltip } from 'react-bootstrap'
 import {
-  FiPlus, FiTrash2, FiUserX, FiUserCheck, FiUser, FiMail, FiX, FiCheck, FiAlertTriangle, FiShield
+  FiPlus, FiTrash2, FiUserX, FiUserCheck, FiUser, FiMail, FiX, FiCheck, FiAlertTriangle, FiShield, FiSearch
 } from 'react-icons/fi'
 import { subscribeAll } from '../../services/firestoreService'
 import './Users.css'
@@ -23,6 +23,7 @@ const Users = () => {
   const [modalError, setModalError] = useState('')
   const [modalLoading, setModalLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
     if (!isAdmin) return
@@ -224,6 +225,11 @@ const Users = () => {
   }
 
   const confirmConfig = getConfirmConfig()
+  const filteredUsers = users.filter(item => {
+    const term = searchTerm.trim().toLocaleLowerCase('es-MX')
+    return !term || [item.name, item.username, item.email, item.status, item.role]
+      .some(value => String(value || '').toLocaleLowerCase('es-MX').includes(term))
+  })
 
   return (
     <div className="fade-in">
@@ -237,13 +243,27 @@ const Users = () => {
         </Button>
       </div>
 
+      <div className="filter-bar">
+        <div className="search-box" style={{ maxWidth: 340 }}>
+          <FiSearch className="search-icon" />
+          <input
+            type="search"
+            className="form-control"
+            placeholder="Buscar nombre, usuario o correo..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Buscar usuarios"
+          />
+        </div>
+      </div>
+
       <div className="custom-card">
         <div className="card-body-custom p-0">
-          {users.length === 0 ? (
+          {filteredUsers.length === 0 ? (
             <div className="empty-state" style={{ padding: 60 }}>
               <FiUser size={64} className="empty-icon text-muted" />
-              <h5>No hay usuarios registrados</h5>
-              <p className="text-muted">Crea el primer usuario profesor</p>
+              <h5>{searchTerm ? 'No se encontraron usuarios' : 'No hay usuarios registrados'}</h5>
+              <p className="text-muted">{searchTerm ? 'Intenta con otro término de búsqueda.' : 'Crea el primer usuario profesor'}</p>
             </div>
           ) : (
             <div className="table-responsive table-scroll-container">
@@ -259,7 +279,7 @@ const Users = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
+                  {filteredUsers.map((u) => (
                     <tr key={u.uid}>
                       <td>
                         <div className="d-flex align-items-center gap-2">

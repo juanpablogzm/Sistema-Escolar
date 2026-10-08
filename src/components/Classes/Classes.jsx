@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Row, Col, Modal, Form, Button } from 'react-bootstrap'
 import { useApp } from '../../context/AppContext'
-import { BsPlus, BsPencil, BsTrash, BsPeople, BsClock, BsGeoAlt, BsCalendar } from 'react-icons/bs'
+import { BsPlus, BsPencil, BsTrash, BsPeople, BsClock, BsGeoAlt, BsCalendar, BsSearch } from 'react-icons/bs'
 
 const Classes = () => {
   const { universities, classes, students, addClass, updateClass, deleteClass } = useApp()
@@ -10,13 +10,23 @@ const Classes = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
   const [filterUni, setFilterUni] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
   const [form, setForm] = useState({
     universityId: '', name: '', code: '', semester: '', schedule: '', classroom: ''
   })
 
-  const filteredClasses = filterUni === 'all'
+  let filteredClasses = filterUni === 'all'
     ? classes
     : classes.filter(c => c.universityId === filterUni)
+  if (searchTerm.trim()) {
+    const term = searchTerm.trim().toLocaleLowerCase('es-MX')
+    filteredClasses = filteredClasses.filter(cls =>
+      String(cls.name || '').toLocaleLowerCase('es-MX').includes(term) ||
+      String(cls.code || '').toLocaleLowerCase('es-MX').includes(term) ||
+      String(cls.semester || '').toLocaleLowerCase('es-MX').includes(term) ||
+      String(cls.classroom || '').toLocaleLowerCase('es-MX').includes(term)
+    )
+  }
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -84,13 +94,24 @@ const Classes = () => {
             <option key={uni.id} value={uni.id}>{uni.icon} {uni.name}</option>
           ))}
         </Form.Select>
+        <div className="search-box" style={{ maxWidth: 280 }}>
+          <BsSearch className="search-icon" />
+          <input
+            type="search"
+            className="form-control"
+            placeholder="Buscar clase, código o salón..."
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            aria-label="Buscar clases"
+          />
+        </div>
       </div>
 
       {filteredClasses.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">📚</div>
-          <h5>No hay clases registradas</h5>
-          <p>Agrega las clases que impartes en tus universidades</p>
+          <h5>{searchTerm ? 'No se encontraron clases' : 'No hay clases registradas'}</h5>
+          <p>{searchTerm ? 'Intenta con otro término de búsqueda.' : 'Agrega las clases que impartes en tus universidades'}</p>
           <button className="btn btn-primary-custom" onClick={handleOpenAdd}>
             <BsPlus size={20} /> Agregar Clase
           </button>
