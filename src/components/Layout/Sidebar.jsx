@@ -20,7 +20,7 @@ const navItems = [
   { path: '/clases', icon: BsBook, label: 'Clases' },
   { path: '/alumnos', icon: BsPeople, label: 'Alumnos' },
   { path: '/asistencia', icon: BsCalendarCheck, label: 'Asistencia' },
-  { path: '/rubricas', icon: BsClipboardCheck, label: 'Rúbricas' },
+  { path: '/rubricas', icon: BsClipboardCheck, label: 'Períodos de evaluación' },
   { path: '/calificaciones', icon: BsBarChartLine, label: 'Calificaciones' },
   { path: '/actividades', icon: BsShuffle, label: 'Actividades' }
 ]

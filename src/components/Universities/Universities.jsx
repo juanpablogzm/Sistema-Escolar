@@ -251,7 +251,7 @@ const Universities = () => {
           <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
           <h5>¿Eliminar universidad?</h5>
           <p className="text-muted" style={{ fontSize: 14 }}>
-            Se eliminarán también todas las clases, alumnos y rúbricas de{' '}
+            Se eliminarán también todas las clases, alumnos y períodos de evaluación de{' '}
             <strong>{showDeleteConfirm?.name}</strong>.
           </p>
           <div className="d-flex gap-2 justify-content-center mt-3">

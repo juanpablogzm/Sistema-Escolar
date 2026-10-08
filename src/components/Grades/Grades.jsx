@@ -388,7 +388,7 @@ const Grades = () => {
       <div className="page-header">
         <div>
           <h2>Calificaciones</h2>
-          <p>Califica a tus alumnos usando las rúbricas definidas</p>
+          <p>Califica a tus alumnos por período de evaluación</p>
         </div>
         {selectedRubric && classStudents.length > 0 && (
           <div className="d-flex gap-2">
@@ -436,7 +436,7 @@ const Grades = () => {
             onChange={e => setSelectedRubric(e.target.value)}
             style={{ maxWidth: 300 }}
           >
-            <option value="">Seleccionar rúbrica...</option>
+            <option value="">Seleccionar período de evaluación...</option>
             {classRubrics.map(r => (
               <option key={r.id} value={r.id}>{r.name}</option>
             ))}
@@ -467,16 +467,16 @@ const Grades = () => {
         <div className="empty-state">
           <div className="empty-icon">🏫</div>
           <h5>Selecciona una clase</h5>
-          <p>Elige una clase y una rúbrica para comenzar a calificar</p>
+          <p>Elige una clase y un período de evaluación para comenzar a calificar</p>
         </div>
       ) : !selectedRubric ? (
         <div className="empty-state">
           <div className="empty-icon">📋</div>
-          <h5>Selecciona una rúbrica</h5>
+          <h5>Selecciona un período de evaluación</h5>
           <p>
             {classRubrics.length === 0
-              ? 'Esta clase no tiene rúbricas. Crea una primero en la sección de Rúbricas.'
-              : 'Elige una rúbrica para calificar a los alumnos.'
+              ? 'Esta clase no tiene períodos de evaluación. Crea uno primero en la sección de Períodos de evaluación.'
+              : 'Elige un período de evaluación para calificar a los alumnos.'
             }
           </p>
         </div>

@@ -62,7 +62,7 @@ const Dashboard = () => {
     { label: 'Universidades', value: universities.length, icon: BsBuildings, bg: 'bg-primary-soft' },
     { label: 'Clases', value: classes.length, icon: BsBook, bg: 'bg-success-soft' },
     { label: 'Alumnos', value: students.length, icon: BsPeople, bg: 'bg-info-soft' },
-    { label: 'Rúbricas', value: rubrics.length, icon: BsClipboardCheck, bg: 'bg-warning-soft' }
+    { label: 'Períodos de evaluación', value: rubrics.length, icon: BsClipboardCheck, bg: 'bg-warning-soft' }
   ]
 
   const barData = {
@@ -298,7 +298,7 @@ const Dashboard = () => {
                   className="btn btn-outline-custom w-100 justify-content-start"
                   onClick={() => navigate('/rubricas')}
                 >
-                  <BsPlus size={20} /> Crear Rúbrica
+                  <BsPlus size={20} /> Crear período
                 </button>
                 {universities.length === 0 && (
                   <button

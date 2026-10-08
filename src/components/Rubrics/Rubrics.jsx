@@ -253,11 +253,11 @@ const Rubrics = () => {
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h2>Rúbricas</h2>
+          <h2>Períodos de evaluación</h2>
           <p>Define los criterios de evaluación para tus clases</p>
         </div>
         <button className="btn btn-primary-custom" onClick={() => setShowModal(true)}>
-          <BsPlus size={20} /> Crear Rúbrica
+          <BsPlus size={20} /> Crear período
         </button>
       </div>
 
@@ -282,10 +282,10 @@ const Rubrics = () => {
           <input
             type="search"
             className="form-control"
-            placeholder="Buscar rúbrica o criterio..."
+            placeholder="Buscar período o criterio..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            aria-label="Buscar rúbricas"
+            aria-label="Buscar períodos de evaluación"
           />
         </div>
       </div>
@@ -293,11 +293,11 @@ const Rubrics = () => {
       {filteredRubrics.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">📋</div>
-          <h5>{searchTerm ? 'No se encontraron rúbricas' : 'No hay rúbricas creadas'}</h5>
-          <p>{searchTerm ? 'Intenta con otro término de búsqueda.' : 'Crea rúbricas con criterios de evaluación para calificar a tus alumnos'}</p>
+          <h5>{searchTerm ? 'No se encontraron períodos de evaluación' : 'No hay períodos de evaluación creados'}</h5>
+          <p>{searchTerm ? 'Intenta con otro término de búsqueda.' : 'Crea períodos de evaluación con criterios para calificar a tus alumnos'}</p>
           {!searchTerm && (
             <button className="btn btn-primary-custom" onClick={() => setShowModal(true)}>
-              <BsPlus size={20} /> Crear Rúbrica
+              <BsPlus size={20} /> Crear período
             </button>
           )}
         </div>
@@ -425,7 +425,7 @@ const Rubrics = () => {
       {/* Add/Edit Modal */}
       <Modal show={showModal} onHide={handleTryClose} centered size="lg">
         <Modal.Header closeButton>
-          <Modal.Title>{editingRubric ? 'Editar Rúbrica' : 'Crear Rúbrica'}</Modal.Title>
+          <Modal.Title>{editingRubric ? 'Editar período de evaluación' : 'Crear período de evaluación'}</Modal.Title>
         </Modal.Header>
         <Form onSubmit={handleSubmit}>
           <Modal.Body>
@@ -479,7 +479,7 @@ const Rubrics = () => {
             <Row className="mb-3">
               <Col md={7}>
                 <Form.Group>
-                  <Form.Label>Nombre de la Rúbrica</Form.Label>
+                  <Form.Label>Nombre del período de evaluación</Form.Label>
                   <Form.Control
                     type="text"
                     placeholder="Ej: Evaluación Parcial 1"
@@ -507,7 +507,7 @@ const Rubrics = () => {
               >
                 <span style={{ fontSize: 20 }}>{form.isFinal ? '🏆' : '○'}</span>
                 <div>
-                  <div style={{ fontWeight: 600, fontSize: 14 }}>Rúbrica Final</div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Período final</div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                     Combina parciales y otros criterios para la calificación final
                   </div>
@@ -738,7 +738,7 @@ const Rubrics = () => {
                 ? 'Selecciona al menos una clase'
                 : totalWeight !== 100
                   ? `Peso total: ${totalWeight}% (debe ser 100%)`
-                  : (editingRubric ? 'Guardar Cambios' : 'Crear Rúbrica')
+                  : (editingRubric ? 'Guardar cambios' : 'Crear período')
               }
             </button>
           </Modal.Footer>
@@ -762,7 +762,7 @@ const Rubrics = () => {
       <Modal show={!!showDeleteConfirm} onHide={() => setShowDeleteConfirm(null)} centered size="sm">
         <Modal.Body className="text-center py-4">
           <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
-          <h5>¿Eliminar rúbrica?</h5>
+          <h5>¿Eliminar período de evaluación?</h5>
           <p className="text-muted" style={{ fontSize: 14 }}>
             Se eliminará <strong>{showDeleteConfirm?.name}</strong> y las calificaciones asociadas.
           </p>
