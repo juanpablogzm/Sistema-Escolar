@@ -226,10 +226,12 @@ const Attendance = () => {
 
     const schoolAlias = sanitizeExcelName(uni?.abbreviation || uni?.name, 'Escuela')
     const groupName = sanitizeExcelName(cls.name || cls.code, 'Grupo')
-    const fileBaseName = `${schoolAlias} - ${groupName}`
+    const selectedPeriod = classPeriods.find(period => period.id === selectedPeriodId)
+    const periodName = selectedPeriod?.name || 'Sin período asignado'
+    const fileBaseName = `${schoolAlias} - ${groupName} - ${sanitizeExcelName(periodName, 'Período')}`
     const dateHeaders = sortedSessions.map(session => parseLocalDate(session.date))
     const summaryHeaders = [
-      'Presentes', 'Ausencias', 'Retardos', 'Justificados', 'Sin registro', 'Asistencia'
+      'Presentes', 'Inasistencias totales', 'Retardos', 'Justificados', 'Sin registro', 'Asistencia'
     ]
 
     const rows = students
@@ -264,13 +266,14 @@ const Attendance = () => {
         ]
       })
 
-    const headerRowIndex = 5
+    const headerRowIndex = 6
     const wsData = [
       ['Escuela', uni?.name || 'Sin universidad'],
       ['Alias', schoolAlias],
       ['Grupo', groupName],
       ['Clase', cls.name || 'Sin clase'],
       ['Semestre', cls.semester || ''],
+      ['Período de evaluación', periodName],
       ['Alumno', 'Matrícula', ...dateHeaders, ...summaryHeaders],
       ...rows
     ]
