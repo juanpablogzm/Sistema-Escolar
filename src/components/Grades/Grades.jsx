@@ -46,6 +46,10 @@ const Grades = () => {
   }, [classStudents, studentSearch])
   const classRubrics = useMemo(() => rubrics.filter(r => (r.classIds || (r.classId ? [r.classId] : [])).includes(selectedClass)), [rubrics, selectedClass])
   const uni = useMemo(() => classObj ? universities.find(u => u.id === classObj.universityId) : null, [universities, classObj])
+  const gradingCriteria = useMemo(
+    () => rubricObj?.criteria.filter(criterion => criterion.type !== 'attendance') || [],
+    [rubricObj]
+  )
 
   useEffect(() => {
     if (!selectedRubric || !rubricObj || classStudents.length === 0) return
@@ -57,7 +61,7 @@ const Grades = () => {
       )
       initial[student.id] = {}
       initialSub[student.id] = {}
-      rubricObj.criteria.forEach(criterion => {
+      gradingCriteria.forEach(criterion => {
         initial[student.id][criterion.id] = existingGrade?.scores?.[criterion.id] ?? ''
         if (criterion.subcriteria?.length) {
           initialSub[student.id][criterion.id] = existingGrade?.subSelections?.[criterion.id] ?? {}
@@ -66,7 +70,7 @@ const Grades = () => {
     })
     setLocalGrades(initial)
     setLocalSubSelections(initialSub)
-  }, [selectedRubric, classStudents, grades, rubricObj])
+  }, [selectedRubric, classStudents, grades, gradingCriteria])
 
   const saveStudentGrade = (studentId) => {
     if (!rubricObj) return
@@ -77,7 +81,7 @@ const Grades = () => {
     )
     const scores = {}
     const subSel = {}
-    rubricObj.criteria.forEach(criterion => {
+    gradingCriteria.forEach(criterion => {
       scores[criterion.id] = Number(currentGrades[studentId]?.[criterion.id]) || 0
       if (criterion.subcriteria?.length) {
         subSel[criterion.id] = currentSubSelections[studentId]?.[criterion.id] ?? {}
@@ -158,26 +162,12 @@ const Grades = () => {
     closeSubModal()
   }
 
-  // Calculate attendance grade for a student in the selected class (0-10 scale)
-  const calculateAttendanceGrade = (studentId) => {
-    const classSessions = attendance.filter(a => a.classId === selectedClass)
-    if (classSessions.length === 0) return 0
-    let score = 0
-    let total = 0
-    classSessions.forEach(session => {
-      const rec = (session.records || []).find(r => r.studentId === studentId)
-      if (rec) {
-        total++
-        if (rec.status === 'present') score += 1
-        else if (rec.status === 'late') score += 0.5
-        else if (rec.status === 'justified') score += 1
-        // absent = 0
-      } else {
-        total++
-      }
-    })
-    return total > 0 ? Math.round((score / total) * 10 * 100) / 100 : 0
-  }
+  const getAbsenceCount = (studentId) => attendance
+    .filter(session => session.classId === selectedClass && session.rubricId === selectedRubric)
+    .reduce(
+      (total, session) => total + ((session.records || []).some(record => record.studentId === studentId && record.status === 'absent') ? 1 : 0),
+      0
+    )
 
   // Calculate a student's grade for a referenced rubric (parcial)
   const calculateRubricRefGrade = (studentId, rubricRefId) => {
@@ -185,31 +175,34 @@ const Grades = () => {
     if (!refRubric) return 0
     const studentGrade = grades.find(g => g.studentId === studentId && g.rubricId === rubricRefId)
     if (!studentGrade?.scores) return 0
+    const criteria = refRubric.criteria.filter(criterion => criterion.type !== 'attendance')
+    const totalWeight = criteria.reduce((sum, criterion) => sum + (Number(criterion.weight) || 0), 0)
+    if (totalWeight === 0) return 0
     let total = 0
-    refRubric.criteria.forEach(criterion => {
+    criteria.forEach(criterion => {
       const score = Number(studentGrade.scores[criterion.id]) || 0
       const percentage = score / 10
       total += percentage * criterion.weight
     })
-    return Math.round(total / 10 * 100) / 100
+    return Math.round((total / totalWeight) * 10 * 100) / 100
   }
 
   const calculateFinalGrade = (studentId) => {
     if (!rubricObj || !localGrades[studentId]) return 0
+    const totalWeight = gradingCriteria.reduce((sum, criterion) => sum + (Number(criterion.weight) || 0), 0)
+    if (totalWeight === 0) return 0
     let total = 0
-    rubricObj.criteria.forEach(criterion => {
+    gradingCriteria.forEach(criterion => {
       let score
       if (criterion.type === 'rubric_ref') {
         score = calculateRubricRefGrade(studentId, criterion.rubricRefId)
-      } else if (criterion.type === 'attendance') {
-        score = calculateAttendanceGrade(studentId)
       } else {
         score = Number(localGrades[studentId]?.[criterion.id]) || 0
       }
       const percentage = score / 10
       total += percentage * criterion.weight
     })
-    return Math.round(total / 10 * 100) / 100
+    return Math.round((total / totalWeight) * 10 * 100) / 100
   }
 
   const getGradeColor = (grade) => {
@@ -226,7 +219,7 @@ const Grades = () => {
       )
       const scores = {}
       const subSel = {}
-      rubricObj.criteria.forEach(criterion => {
+      gradingCriteria.forEach(criterion => {
         scores[criterion.id] = Number(localGrades[student.id]?.[criterion.id]) || 0
         if (criterion.subcriteria?.length) {
           subSel[criterion.id] = localSubSelections[student.id]?.[criterion.id] ?? {}
@@ -248,15 +241,14 @@ const Grades = () => {
         'Alumno': student.name,
         'Matrícula': student.matricula || ''
       }
-      rubricObj.criteria.forEach(criterion => {
+      gradingCriteria.forEach(criterion => {
         if (criterion.type === 'rubric_ref') {
           row[criterion.name] = calculateRubricRefGrade(student.id, criterion.rubricRefId)
-        } else if (criterion.type === 'attendance') {
-          row[criterion.name] = calculateAttendanceGrade(student.id)
         } else {
           row[criterion.name] = Number(localGrades[student.id]?.[criterion.id]) || 0
         }
       })
+      row['Inasistencias'] = getAbsenceCount(student.id)
       row['Calificación Final'] = calculateFinalGrade(student.id)
       return row
     })
@@ -514,11 +506,11 @@ const Grades = () => {
                   <th style={{ minWidth: 200, position: 'sticky', left: 0, background: 'var(--bg-main)', zIndex: 1 }}>
                     Alumno
                   </th>
-                  {rubricObj.criteria.map(c => (
+                  {gradingCriteria.map(c => (
                     <th key={c.id} style={{ textAlign: 'center', minWidth: 140 }}>
                       <div>{c.name}</div>
                       <small style={{ fontWeight: 400, textTransform: 'none' }}>
-                        ({c.weight}%){c.type === 'rubric_ref' ? ' 📋' : c.type === 'attendance' ? ' 📅' : c.type === 'natgeo' ? ' 🌍' : ''}
+                        ({c.weight}%){c.type === 'rubric_ref' ? ' 📋' : c.type === 'natgeo' ? ' 🌍' : ''}
                       </small>
                       {c.type === 'natgeo' && (
                         <div style={{ marginTop: 4 }}>
@@ -545,6 +537,7 @@ const Grades = () => {
                       )}
                     </th>
                   ))}
+                  <th style={{ textAlign: 'center', minWidth: 130 }}>Inasistencias</th>
                   <th style={{ textAlign: 'center', minWidth: 100 }}>Final</th>
                 </tr>
               </thead>
@@ -559,7 +552,7 @@ const Grades = () => {
                           {student.matricula}
                         </div>
                       </td>
-                      {rubricObj.criteria.map(criterion => (
+                      {gradingCriteria.map(criterion => (
                         <td key={criterion.id} style={{ textAlign: 'center' }}>
                           {criterion.type === 'rubric_ref' ? (
                             <span style={{
@@ -569,15 +562,6 @@ const Grades = () => {
                               opacity: 0.9
                             }}>
                               {calculateRubricRefGrade(student.id, criterion.rubricRefId).toFixed(1)}
-                            </span>
-                          ) : criterion.type === 'attendance' ? (
-                            <span style={{
-                              fontSize: 16,
-                              fontWeight: 700,
-                              color: getGradeColor(calculateAttendanceGrade(student.id)),
-                              opacity: 0.9
-                            }}>
-                              {calculateAttendanceGrade(student.id).toFixed(1)}
                             </span>
                           ) : criterion.type === 'natgeo' ? (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
@@ -641,6 +625,11 @@ const Grades = () => {
                         </td>
                       ))}
                       <td style={{ textAlign: 'center' }}>
+                        <span style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-secondary)' }}>
+                          {getAbsenceCount(student.id)}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
                         <span style={{
                           fontSize: 18,
                           fontWeight: 800,
@@ -654,7 +643,7 @@ const Grades = () => {
                 })}
                 {visibleClassStudents.length === 0 && (
                   <tr>
-                    <td colSpan={rubricObj.criteria.length + 2} className="text-center py-4 text-muted">
+                    <td colSpan={gradingCriteria.length + 3} className="text-center py-4 text-muted">
                       No se encontraron alumnos con esa búsqueda.
                     </td>
                   </tr>

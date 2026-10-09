@@ -29,11 +29,12 @@ const parseLocalDate = (dateString) => {
 
 const Attendance = () => {
   const {
-    universities, classes, students, attendance,
+    universities, classes, students, rubrics, attendance,
     addAttendance, updateAttendance, deleteAttendance
   } = useApp()
 
   const [selectedClassId, setSelectedClassId] = useState('')
+  const [selectedPeriodId, setSelectedPeriodId] = useState('')
   const [filterUni, setFilterUni] = useState('all')
   const [showSessionModal, setShowSessionModal] = useState(false)
   const [editingSession, setEditingSession] = useState(null)
@@ -55,11 +56,19 @@ const Attendance = () => {
     [students, selectedClassId]
   )
 
+  const classPeriods = useMemo(() =>
+    rubrics.filter(period => (period.classIds || (period.classId ? [period.classId] : [])).includes(selectedClassId)),
+    [rubrics, selectedClassId]
+  )
+
   const classSessions = useMemo(() =>
     attendance
       .filter(a => a.classId === selectedClassId)
+      .filter(a => selectedPeriodId === 'unassigned'
+        ? !a.rubricId || !rubrics.some(period => period.id === a.rubricId)
+        : a.rubricId === selectedPeriodId)
       .sort((a, b) => a.date.localeCompare(b.date)),
-    [attendance, selectedClassId]
+    [attendance, rubrics, selectedClassId, selectedPeriodId]
   )
 
   const filteredClassStudents = useMemo(() => {
@@ -155,6 +164,7 @@ const Attendance = () => {
   const handleSaveSession = async () => {
     const data = {
       classId: selectedClassId,
+      ...(selectedPeriodId !== 'unassigned' && { rubricId: selectedPeriodId }),
       date: sessionDate,
       takenAt: new Date().toISOString(),
       records: sessionRecords
@@ -207,9 +217,7 @@ const Attendance = () => {
 
     const cls = classes.find(c => c.id === selectedClassId)
     const uni = cls ? universities.find(u => u.id === cls.universityId) : null
-    const sortedSessions = attendance
-      .filter(session => session.classId === selectedClassId)
-      .sort((a, b) => a.date.localeCompare(b.date))
+    const sortedSessions = classSessions
 
     if (!cls || sortedSessions.length === 0) {
       alert('La clase seleccionada no tiene asistencias para exportar')
@@ -305,18 +313,18 @@ const Attendance = () => {
       <div className="page-header">
         <div>
           <h2>Asistencia</h2>
-          <p>Registra y consulta la asistencia de tus alumnos por clase</p>
+          <p>Registra y consulta la asistencia de tus alumnos por período de evaluación</p>
         </div>
         <div className="d-flex gap-2 page-header-actions">
           <button
             className="btn btn-outline-custom"
             onClick={handleExportExcel}
-            disabled={!selectedClassId || classStudents.length === 0 || classSessions.length === 0}
-            title={!selectedClassId ? 'Selecciona una clase para exportar' : undefined}
+            disabled={!selectedClassId || !selectedPeriodId || classStudents.length === 0 || classSessions.length === 0}
+            title={!selectedClassId ? 'Selecciona una clase para exportar' : !selectedPeriodId ? 'Selecciona un período de evaluación para exportar' : undefined}
           >
             <BsDownload size={20} /> Exportar Excel
           </button>
-          {selectedClassId && classStudents.length > 0 && (
+          {selectedClassId && selectedPeriodId && selectedPeriodId !== 'unassigned' && classStudents.length > 0 && (
             <button className="btn btn-primary-custom" onClick={handleNewSession}>
               <BsPlus size={20} /> Nueva Sesión
             </button>
@@ -328,7 +336,7 @@ const Attendance = () => {
       <div className="filter-bar">
         <Form.Select
           value={filterUni}
-          onChange={e => { setFilterUni(e.target.value); setSelectedClassId('') }}
+          onChange={e => { setFilterUni(e.target.value); setSelectedClassId(''); setSelectedPeriodId('') }}
           style={{ maxWidth: 250 }}
         >
           <option value="all">Todas las universidades</option>
@@ -338,7 +346,7 @@ const Attendance = () => {
         </Form.Select>
         <Form.Select
           value={selectedClassId}
-          onChange={e => setSelectedClassId(e.target.value)}
+          onChange={e => { setSelectedClassId(e.target.value); setSelectedPeriodId('') }}
           style={{ maxWidth: 300 }}
         >
           <option value="">Seleccionar clase...</option>
@@ -351,6 +359,19 @@ const Attendance = () => {
             )
           })}
         </Form.Select>
+        {selectedClassId && (
+          <Form.Select
+            value={selectedPeriodId}
+            onChange={e => setSelectedPeriodId(e.target.value)}
+            style={{ maxWidth: 300 }}
+          >
+            <option value="">Seleccionar período de evaluación...</option>
+            {classPeriods.map(period => (
+              <option key={period.id} value={period.id}>{period.name}</option>
+            ))}
+            <option value="unassigned">Sin período asignado</option>
+          </Form.Select>
+        )}
         <div className="search-box" style={{ maxWidth: 280 }}>
           <BsSearch className="search-icon" />
           <input
@@ -414,6 +435,12 @@ const Attendance = () => {
             <p>Usa el buscador para localizar la asistencia de un alumno sin elegir primero su grupo.</p>
           </div>
         )
+      ) : !selectedPeriodId ? (
+        <div className="empty-state">
+          <div className="empty-icon">📋</div>
+          <h5>Selecciona un período de evaluación</h5>
+          <p>Elige el período al que corresponde la asistencia para consultar o registrar sesiones.</p>
+        </div>
       ) : classStudents.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">👥</div>
@@ -430,6 +457,7 @@ const Attendance = () => {
                       <strong>{selectedUni?.icon} {selectedClass.name}</strong>
                       <span className="text-muted ms-2">({selectedClass.code})</span>
                       <span className="text-muted ms-2">• {classStudents.length} alumnos • {classSessions.length} sesiones</span>
+                      <span className="text-muted ms-2">• {selectedPeriodId === 'unassigned' ? 'Sin período asignado' : classPeriods.find(period => period.id === selectedPeriodId)?.name}</span>
                     </div>
                   </div>
                 </div>
@@ -440,9 +468,11 @@ const Attendance = () => {
                   <div className="empty-icon">📅</div>
                   <h5>No hay sesiones registradas</h5>
                   <p>Crea una nueva sesión para comenzar a tomar asistencia</p>
-                  <button className="btn btn-primary-custom" onClick={handleNewSession}>
-                    <BsPlus size={20} /> Nueva Sesión
-                  </button>
+                  {selectedPeriodId !== 'unassigned' && (
+                    <button className="btn btn-primary-custom" onClick={handleNewSession}>
+                      <BsPlus size={20} /> Nueva Sesión
+                    </button>
+                  )}
                 </div>
               ) : (
                 <>

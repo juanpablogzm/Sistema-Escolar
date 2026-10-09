@@ -108,24 +108,6 @@ const Rubrics = () => {
     })
   }
 
-  const addAttendanceCriterion = () => {
-    // Only allow one attendance criterion
-    if (form.criteria.some(c => c.type === 'attendance')) return
-    setForm({
-      ...form,
-      criteria: [...form.criteria, {
-        id: uuidv4(),
-        name: 'Asistencia',
-        description: 'Porcentaje de asistencia calculado automáticamente',
-        maxScore: 10,
-        weight: 0,
-        type: 'attendance'
-      }]
-    })
-  }
-
-  const hasAttendanceCriterion = form.criteria.some(c => c.type === 'attendance')
-
   const toggleNatgeo = (id) => {
     setForm(prev => ({
       ...prev,
@@ -234,7 +216,9 @@ const Rubrics = () => {
   const subMaxLabelPoints = subLabels.length > 0 ? Math.max(0, ...subLabels.map(l => Number(l.points) || 0)) : 0
   const subTotalMaxPoints = subMaxLabelPoints * subcriteriaForm.length
 
-  const totalWeight = form.criteria.reduce((sum, c) => sum + (Number(c.weight) || 0), 0)
+  const totalWeight = form.criteria
+    .filter(criterion => criterion.type !== 'attendance')
+    .reduce((sum, criterion) => sum + (Number(criterion.weight) || 0), 0)
 
   // Rubric IDs already referenced in current final rubric
   const referencedRubricIds = form.criteria.filter(c => c.type === 'rubric_ref').map(c => c.rubricRefId)
@@ -562,28 +546,6 @@ const Rubrics = () => {
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {form.classIds.length > 0 && !hasAttendanceCriterion && (
-              <div style={{
-                background: '#10B98110',
-                border: '1px dashed #10B981',
-                borderRadius: 'var(--radius-sm)',
-                padding: 12,
-                marginBottom: 12
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#10B981' }}>
-                  <BsCalendarCheck size={14} /> Vincular asistencia:
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-outline-custom"
-                  style={{ padding: '4px 10px', fontSize: 12 }}
-                  onClick={addAttendanceCriterion}
-                >
-                  <BsPlus size={14} /> Asistencia (cálculo automático)
-                </button>
               </div>
             )}
 
