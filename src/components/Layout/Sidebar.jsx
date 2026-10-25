@@ -15,7 +15,7 @@ import {
 import { useAuth } from '../../context/AuthContext'
 
 const navItems = [
-  { path: '/', icon: BsSpeedometer2, label: 'Dashboard' },
+  { path: '/app', icon: BsSpeedometer2, label: 'Dashboard' },
   { path: '/universidades', icon: BsBuildings, label: 'Universidades' },
   { path: '/clases', icon: BsBook, label: 'Clases' },
   { path: '/alumnos', icon: BsPeople, label: 'Alumnos' },
@@ -44,7 +44,7 @@ const Sidebar = ({ isOpen, onToggle }) => {
       {isOpen && <div className="sidebar-overlay" onClick={onToggle} />}
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
-          <div className="brand-icon">🌸</div>
+          <div className="brand-icon"><BsBook aria-hidden="true" /></div>
           <div className="brand-text">
             <h5 className="mb-0">ClassRoom</h5>
             <small>Gestión de Clases</small>
@@ -57,7 +57,7 @@ const Sidebar = ({ isOpen, onToggle }) => {
               key={item.path}
               to={item.path}
               className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
-              end={item.path === '/'}
+              end={item.path === '/app'}
               onClick={() => window.innerWidth < 992 && onToggle()}
             >
               <item.icon className="sidebar-icon" />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowRight, FiUserPlus } from 'react-icons/fi'
+import { FiMail, FiLock, FiEye, FiEyeOff, FiArrowRight, FiBookOpen, FiUserPlus } from 'react-icons/fi'
 import './Login.css'
 
 const Login = () => {
@@ -19,7 +19,7 @@ const Login = () => {
     setLoading(true)
     try {
       await login(email, password)
-      navigate('/')
+      navigate('/app')
     } catch (err) {
       let message = 'Error al iniciar sesión'
       if (err.code === 'auth/user-not-found') {
@@ -45,7 +45,7 @@ const Login = () => {
     <div className="login-page">
       <div className="login-container">
         <div className="login-header">
-          <div className="login-logo">👩‍🏫📚</div>
+          <div className="login-logo"><FiBookOpen aria-hidden="true" /></div>
           <h1>ClassRoom</h1>
           <p>Sistema de Gestión de Clases</p>
         </div>

@@ -15,6 +15,7 @@ import Users from './components/Users/Users'
 import Login from './components/Login/Login'
 import Register from './components/Login/Register'
 import ProtectedRoute from './components/Login/ProtectedRoute'
+import LandingPage from './components/LandingPage/LandingPage'
 import 'bootstrap/dist/css/bootstrap.min.css'
 import './index.css'
 
@@ -24,10 +25,11 @@ function App() {
       <AppProvider>
         <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
+            <Route path="/" element={<LandingPage />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/app" element={<Dashboard />} />
               <Route path="/universidades" element={<Universities />} />
               <Route path="/clases" element={<Classes />} />
               <Route path="/alumnos" element={<Students />} />

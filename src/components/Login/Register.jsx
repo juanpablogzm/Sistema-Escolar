@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { FiMail, FiLock, FiEye, FiEyeOff, FiUser, FiUserPlus } from 'react-icons/fi'
+import { FiMail, FiLock, FiEye, FiEyeOff, FiBookOpen, FiUser, FiUserPlus } from 'react-icons/fi'
 import './Login.css'
 
 const Register = () => {
@@ -42,7 +42,7 @@ const Register = () => {
     try {
       const username = name.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20)
       await register(name.trim(), username, email.trim().toLowerCase(), password)
-      navigate('/')
+      navigate('/app')
     } catch (err) {
       let message = 'Error al crear la cuenta'
       if (err.code === 'auth/email-already-in-use') {
@@ -64,7 +64,7 @@ const Register = () => {
     <div className="login-page">
       <div className="login-container">
         <div className="login-header">
-          <div className="login-logo">👩‍🏫📚</div>
+          <div className="login-logo"><FiBookOpen aria-hidden="true" /></div>
           <h1>ClassRoom</h1>
           <p>Crear nueva cuenta</p>
         </div>
