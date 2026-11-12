@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { BsList, BsBell, BsSun, BsMoon, BsCloudCheck, BsCloudArrowUp, BsCloudSlash, BsArrowRepeat } from 'react-icons/bs'
 import { useApp } from '../../context/AppContext'
+import packageJson from '../../../package.json'
 
 const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -61,7 +62,7 @@ const Layout = () => {
         <footer className="app-footer">
           <span>ClassRoom</span>
           <span className="app-footer-separator" aria-hidden="true">•</span>
-          <span>Versión 1</span>
+          <span>Versión {packageJson.version}</span>
         </footer>
       </main>
     </div>
