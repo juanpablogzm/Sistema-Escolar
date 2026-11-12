@@ -21,10 +21,16 @@ const Grades = () => {
   const [subModalManualGrade, setSubModalManualGrade] = useState('')
   const [natgeoImportResult, setNatgeoImportResult] = useState(null) // { matched, unmatched, pendingUpdates }
   const [activNatgeoCriterionId, setActivNatgeoCriterionId] = useState(null)
+  const [natgeoImportRows, setNatgeoImportRows] = useState([])
+  const [natgeoNameColumn, setNatgeoNameColumn] = useState('')
+  const [natgeoScoreColumn, setNatgeoScoreColumn] = useState('')
+  const [natgeoImportError, setNatgeoImportError] = useState('')
+  const [showNatgeoColumnModal, setShowNatgeoColumnModal] = useState(false)
   const natgeoFileInputRef = useRef(null)
   const autoSaveTimers = useRef({})
   const localGradesRef = useRef({})
   const localSubSelectionsRef = useRef({})
+  const localGradeScopeRef = useRef('')
   const gradesRef = useRef([])
 
   // Keep refs in sync with latest state/context to avoid stale closures in debounced saves
@@ -53,6 +59,8 @@ const Grades = () => {
 
   useEffect(() => {
     if (!selectedRubric || !rubricObj || classStudents.length === 0) return
+    const scope = `${selectedClass}:${selectedRubric}`
+    const preserveLocalGrades = localGradeScopeRef.current === scope
     const initial = {}
     const initialSub = {}
     classStudents.forEach(student => {
@@ -62,15 +70,22 @@ const Grades = () => {
       initial[student.id] = {}
       initialSub[student.id] = {}
       gradingCriteria.forEach(criterion => {
-        initial[student.id][criterion.id] = existingGrade?.scores?.[criterion.id] ?? ''
+        initial[student.id][criterion.id] = preserveLocalGrades
+          ? localGradesRef.current[student.id]?.[criterion.id] ?? existingGrade?.scores?.[criterion.id] ?? ''
+          : existingGrade?.scores?.[criterion.id] ?? ''
         if (criterion.subcriteria?.length) {
-          initialSub[student.id][criterion.id] = existingGrade?.subSelections?.[criterion.id] ?? {}
+          initialSub[student.id][criterion.id] = preserveLocalGrades
+            ? localSubSelectionsRef.current[student.id]?.[criterion.id] ?? existingGrade?.subSelections?.[criterion.id] ?? {}
+            : existingGrade?.subSelections?.[criterion.id] ?? {}
         }
       })
     })
+    localGradeScopeRef.current = scope
+    localGradesRef.current = initial
+    localSubSelectionsRef.current = initialSub
     setLocalGrades(initial)
     setLocalSubSelections(initialSub)
-  }, [selectedRubric, classStudents, grades, gradingCriteria])
+  }, [selectedClass, selectedRubric, classStudents, grades, gradingCriteria])
 
   const saveStudentGrade = (studentId) => {
     if (!rubricObj) return
@@ -98,7 +113,12 @@ const Grades = () => {
 
   const handleScoreChange = (studentId, criterionId, value) => {
     const num = value === '' ? '' : Math.min(Math.max(0, Number(value)), 10)
-    setLocalGrades(prev => ({ ...prev, [studentId]: { ...prev[studentId], [criterionId]: num } }))
+    const updatedGrades = {
+      ...localGradesRef.current,
+      [studentId]: { ...localGradesRef.current[studentId], [criterionId]: num }
+    }
+    localGradesRef.current = updatedGrades
+    setLocalGrades(updatedGrades)
     setSaved(false)
     clearTimeout(autoSaveTimers.current[studentId])
     autoSaveTimers.current[studentId] = setTimeout(() => {
@@ -261,87 +281,160 @@ const Grades = () => {
   }
 
   // --- NatGeo Excel import ---
-  const normalizeName = (str) =>
-    str.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z\s]/g, '')
-      .trim()
+  const normalizeName = (str) => String(str ?? '')
+    .normalize('NFKD')
+    .replace(/[\p{M}\p{Cf}]/gu, '')
+    .toLowerCase()
+    .replace(/[,"'‘’“”„‟]+/gu, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+  const getTokenSimilarity = (first, second) => {
+    if (first === second) return 1
+    if (Math.min(first.length, second.length) < 5) return 0
+
+    let previous = Array.from({ length: second.length + 1 }, (_, index) => index)
+    for (let i = 1; i <= first.length; i++) {
+      const current = [i]
+      for (let j = 1; j <= second.length; j++) {
+        current[j] = Math.min(
+          current[j - 1] + 1,
+          previous[j] + 1,
+          previous[j - 1] + (first[i - 1] === second[j - 1] ? 0 : 1)
+        )
+      }
+      previous = current
+    }
+
+    const distance = previous[second.length]
+    const maxDistance = Math.max(first.length, second.length) >= 8 ? 2 : 1
+    return distance <= maxDistance ? 0.8 - (distance - 1) * 0.1 : 0
+  }
+
+  const alignNameTokens = (sourceTokens, targetTokens) => {
+    let best = { matched: 0, quality: 0, exact: 0 }
+
+    const search = (sourceIndex, usedTargetTokens, matched, quality, exact) => {
+      if (matched + sourceTokens.length - sourceIndex < best.matched) return
+      if (sourceIndex === sourceTokens.length) {
+        if (matched > best.matched || (matched === best.matched && quality > best.quality)) {
+          best = { matched, quality, exact }
+        } else if (matched === best.matched && quality === best.quality) {
+          best.exact = Math.max(best.exact, exact)
+        }
+        return
+      }
+
+      search(sourceIndex + 1, usedTargetTokens, matched, quality, exact)
+
+      for (let start = 0; start < targetTokens.length; start++) {
+        for (let end = start + 1; end <= Math.min(targetTokens.length, start + 3); end++) {
+          const targetIndexes = Array.from({ length: end - start }, (_, offset) => start + offset)
+          if (targetIndexes.some(index => usedTargetTokens.has(index))) continue
+
+          const targetToken = targetTokens.slice(start, end).join('')
+          const similarity = getTokenSimilarity(sourceTokens[sourceIndex], targetToken)
+          if (!similarity) continue
+
+          const nextUsedTokens = new Set(usedTargetTokens)
+          targetIndexes.forEach(index => nextUsedTokens.add(index))
+          search(
+            sourceIndex + 1,
+            nextUsedTokens,
+            matched + 1,
+            quality + similarity,
+            exact + (similarity === 1 ? 1 : 0)
+          )
+        }
+      }
+    }
+
+    search(0, new Set(), 0, 0, 0)
+    return best
+  }
 
   const matchStudentByNatGeoName = (natgeoName, studentList) => {
-    // NatGeo format: "Vasquez, Ashley" → split by comma
-    const normalized = normalizeName(natgeoName)
-    const parts = natgeoName.split(',').map(p => normalizeName(p.trim())).filter(Boolean)
-    return studentList.find(student => {
-      const sn = normalizeName(student.name)
-      if (parts.length >= 2) {
-        return parts.every(part => sn.includes(part))
-      }
-      return sn.includes(normalized)
-    })
+    const normalizedImportedName = normalizeName(natgeoName)
+    if (!normalizedImportedName) return null
+
+    const exactMatches = studentList.filter(student =>
+      normalizeName(student.name) === normalizedImportedName
+    )
+    if (exactMatches.length === 1) return exactMatches[0]
+    if (exactMatches.length > 1) return null
+
+    const importedTokens = [...new Set(normalizedImportedName.split(' ').filter(Boolean))]
+    if (!importedTokens.length) return null
+
+    const candidates = studentList.map(student => {
+      const studentTokens = [...new Set(normalizeName(student.name).split(' ').filter(Boolean))]
+      if (!studentTokens.length) return null
+
+      const sourceTokens = importedTokens.length <= studentTokens.length ? importedTokens : studentTokens
+      const targetTokens = importedTokens.length <= studentTokens.length ? studentTokens : importedTokens
+      const alignment = alignNameTokens(sourceTokens, targetTokens)
+      const isSingleExactName = sourceTokens.length === 1 &&
+        targetTokens.length === 1 &&
+        alignment.exact === 1
+      if (alignment.matched !== sourceTokens.length || (sourceTokens.length < 2 && !isSingleExactName)) return null
+
+      const score = alignment.quality + (sourceTokens.length === targetTokens.length ? 0.5 : 0)
+      return { student, score, exact: alignment.exact }
+    }).filter(Boolean)
+
+    if (!candidates.length) return null
+    candidates.sort((a, b) => b.score - a.score || b.exact - a.exact)
+    const [best, second] = candidates
+    if (second && best.score === second.score && best.exact === second.exact) return null
+    return best.student
+  }
+
+  const normalizeColumnLabel = (label) => String(label ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+
+  const findColumnIndex = (row, columnName) => {
+    const headers = row.map(normalizeColumnLabel)
+    const exactIndex = headers.indexOf(columnName)
+    if (exactIndex !== -1) return exactIndex
+    return headers.findIndex(header => header.includes(columnName))
   }
 
   const parseNatGeoExcel = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
+      const isCsv = file.name.toLowerCase().endsWith('.csv')
       reader.onload = (e) => {
         try {
-          const data = new Uint8Array(e.target.result)
-          const workbook = XLSX.read(data, { type: 'array' })
-          const sheet = workbook.Sheets[workbook.SheetNames[0]]
-          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
-
-          let headerRowIdx = -1
-          let nameColIdx = -1
-          let scoreColIdx = -1
-
-          for (let r = 0; r < rows.length; r++) {
-            for (let c = 0; c < rows[r].length; c++) {
-              const cellVal = String(rows[r][c]).trim()
-              if (cellVal === 'Student Name') {
-                nameColIdx = c
-                headerRowIdx = r
-              }
-              if (cellVal === 'Average Score') {
-                scoreColIdx = c
-              }
-            }
-            if (nameColIdx !== -1 && scoreColIdx !== -1) break
-          }
-
-          if (nameColIdx === -1 || scoreColIdx === -1) {
-            reject(new Error('No se encontraron las columnas "Student Name" y "Average Score" en el archivo.'))
+          const data = isCsv ? e.target.result : new Uint8Array(e.target.result)
+          const workbook = XLSX.read(data, { type: isCsv ? 'string' : 'array' })
+          if (!workbook.SheetNames.length) {
+            reject(new Error('El archivo no contiene hojas para importar.'))
             return
           }
-
-          const results = []
-          for (let r = headerRowIdx + 1; r < rows.length; r++) {
-            const name = String(rows[r][nameColIdx] || '').trim()
-            const scoreRaw = String(rows[r][scoreColIdx] || '').trim()
-            if (!name) continue
-            let score = null
-            if (scoreRaw.endsWith('%')) {
-              const pct = parseFloat(scoreRaw)
-              if (!isNaN(pct)) score = Math.round(Math.min(Math.max(pct / 10, 0), 10) * 100) / 100
-            } else {
-              const num = parseFloat(scoreRaw)
-              if (!isNaN(num)) {
-                // if stored as decimal (e.g. 0.61) vs percentage (61)
-                const pct = num > 1 ? num : num * 100
-                score = Math.round(Math.min(Math.max(pct / 10, 0), 10) * 100) / 100
-              }
-            }
-            if (name && score !== null) {
-              results.push({ name, score })
-            }
-          }
-          resolve(results)
+          const sheet = workbook.Sheets[workbook.SheetNames[0]]
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+          resolve(rows)
         } catch (err) {
           reject(err)
         }
       }
       reader.onerror = () => reject(new Error('Error leyendo el archivo'))
-      reader.readAsArrayBuffer(file)
+      if (isCsv) reader.readAsText(file)
+      else reader.readAsArrayBuffer(file)
     })
+  }
+
+  const findSuggestedColumn = (rows, aliases) => {
+    const normalizedAliases = aliases.map(normalizeColumnLabel)
+    for (const row of rows) {
+      const column = row.find(cell => normalizedAliases.includes(normalizeColumnLabel(cell)))
+      if (column !== undefined) return String(column).trim()
+    }
+    return ''
   }
 
   const handleNatGeoFileChange = async (e) => {
@@ -349,24 +442,110 @@ const Grades = () => {
     if (!file || !activNatgeoCriterionId) return
     e.target.value = ''
     try {
-      const parsed = await parseNatGeoExcel(file)
-      const matched = []
-      const unmatched = []
-      const updates = {}
-      parsed.forEach(({ name, score }) => {
-        const student = matchStudentByNatGeoName(name, classStudents)
-        if (student) {
-          matched.push({ studentName: student.name, excelName: name, score })
-          updates[student.id] = score
-        } else {
-          unmatched.push(name)
-        }
-      })
-      // Don't apply yet — show preview first, apply on confirm
-      setNatgeoImportResult({ matched, unmatched, pendingUpdates: updates, criterionId: activNatgeoCriterionId })
+      const rows = await parseNatGeoExcel(file)
+      if (!rows.length) throw new Error('El archivo está vacío.')
+      setNatgeoImportRows(rows)
+      setNatgeoNameColumn(findSuggestedColumn(rows, [
+        'Student Name', 'Name', 'Alumno', 'Nombre', 'Nombre completo', 'Nombre del alumno'
+      ]))
+      setNatgeoScoreColumn(findSuggestedColumn(rows, [
+        'Average Score', 'Score', 'Grade', 'Calificación', 'Nota', 'Puntuación'
+      ]))
+      setNatgeoImportError('')
+      setShowNatgeoColumnModal(true)
     } catch (err) {
       setNatgeoImportResult({ error: err.message })
     }
+  }
+
+  const handleNatGeoColumnSubmit = (e) => {
+    e.preventDefault()
+    setNatgeoImportError('')
+    const nameColumn = normalizeColumnLabel(natgeoNameColumn)
+    const scoreColumn = normalizeColumnLabel(natgeoScoreColumn)
+    if (!nameColumn || !scoreColumn) {
+      setNatgeoImportError('Indica el campo que contiene el nombre y el que contiene la calificación.')
+      return
+    }
+    if (nameColumn === scoreColumn) {
+      setNatgeoImportError('El campo del nombre y el de la calificación deben ser diferentes.')
+      return
+    }
+
+    const headerRowIdx = natgeoImportRows.findIndex(row =>
+      findColumnIndex(row, nameColumn) !== -1 && findColumnIndex(row, scoreColumn) !== -1
+    )
+    if (headerRowIdx === -1) {
+      const likelyHeaderRow = natgeoImportRows.reduce(
+        (best, row) => row.filter(value => String(value ?? '').trim()).length > best.filter(value => String(value ?? '').trim()).length ? row : best,
+        []
+      )
+      const availableHeaders = [...new Set(likelyHeaderRow.map(value => String(value ?? '').trim()).filter(Boolean))]
+      const headerList = availableHeaders.length ? ` Encabezados encontrados: ${availableHeaders.join(', ')}.` : ''
+      setNatgeoImportError(`No se encontraron ambos campos en una misma fila del archivo. Revisa los nombres e inténtalo de nuevo.${headerList}`)
+      return
+    }
+
+    const headerRow = natgeoImportRows[headerRowIdx]
+    const nameColIdx = findColumnIndex(headerRow, nameColumn)
+    const scoreColIdx = findColumnIndex(headerRow, scoreColumn)
+    if (nameColIdx === scoreColIdx) {
+      setNatgeoImportError('Los dos campos coinciden con la misma columna. Especifica nombres de campo distintos.')
+      return
+    }
+    const parsed = []
+    for (let r = headerRowIdx + 1; r < natgeoImportRows.length; r++) {
+      const name = String(natgeoImportRows[r][nameColIdx] ?? '').trim()
+      const scoreRaw = String(natgeoImportRows[r][scoreColIdx] ?? '').trim()
+      if (!name) continue
+      let score = null
+      if (scoreRaw.endsWith('%')) {
+        const pct = parseFloat(scoreRaw)
+        if (!isNaN(pct)) score = Math.round(Math.min(Math.max(pct / 10, 0), 10) * 100) / 100
+      } else {
+        const num = parseFloat(scoreRaw)
+        if (!isNaN(num)) {
+          const pct = num > 1 ? num : num * 100
+          score = Math.round(Math.min(Math.max(pct / 10, 0), 10) * 100) / 100
+        }
+      }
+      if (score !== null) parsed.push({ name, score })
+    }
+    if (!parsed.length) {
+      setNatgeoImportError('No se encontraron filas con nombres y calificaciones válidas en esos campos.')
+      return
+    }
+
+    const matched = []
+    const unmatched = []
+    const updates = {}
+    const diagnostics = []
+    parsed.forEach(({ name, score }) => {
+      const student = matchStudentByNatGeoName(name, classStudents)
+      diagnostics.push({
+        excelName: name,
+        normalizedExcelName: normalizeName(name),
+        matchedStudent: student?.name ?? null,
+        normalizedMatchedName: student ? normalizeName(student.name) : null
+      })
+      if (student) {
+        matched.push({ studentName: student.name, excelName: name, score })
+        updates[student.id] = score
+      } else {
+        unmatched.push(name)
+      }
+    })
+    setShowNatgeoColumnModal(false)
+    setNatgeoImportResult({
+      matched,
+      unmatched,
+      pendingUpdates: updates,
+      criterionId: activNatgeoCriterionId,
+      diagnostics,
+      className: classObj?.name || selectedClass,
+      nameColumn: headerRow[nameColIdx],
+      scoreColumn: headerRow[scoreColIdx]
+    })
   }
 
   const triggerNatGeoImport = (criterionId) => {
@@ -531,7 +710,7 @@ const Grades = () => {
                               fontWeight: 600
                             }}
                           >
-                            <BsUpload size={10} /> Importar Excel
+                            <BsUpload size={10} /> Importar Excel/CSV
                           </button>
                         </div>
                       )}
@@ -826,10 +1005,62 @@ const Grades = () => {
       <input
         ref={natgeoFileInputRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
         style={{ display: 'none' }}
         onChange={handleNatGeoFileChange}
       />
+
+      <Modal
+        show={showNatgeoColumnModal}
+        onHide={() => setShowNatgeoColumnModal(false)}
+        centered
+        size="md"
+      >
+        <Form onSubmit={handleNatGeoColumnSubmit}>
+          <Modal.Header closeButton>
+            <Modal.Title style={{ fontSize: 16, fontWeight: 700 }}>
+              Indicar campos para importar
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body style={{ padding: '20px 24px', maxHeight: '70vh', overflowY: 'auto' }}>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Escribe el nombre de las columnas del archivo. La búsqueda ignora mayúsculas, acentos y espacios.
+            </p>
+            <Form.Group className="mb-3">
+              <Form.Label>Campo con el nombre del alumno</Form.Label>
+              <Form.Control
+                type="text"
+                value={natgeoNameColumn}
+                onChange={e => setNatgeoNameColumn(e.target.value)}
+                placeholder="Ej. Student Name"
+                autoFocus
+              />
+            </Form.Group>
+            <Form.Group>
+              <Form.Label>Campo con la calificación</Form.Label>
+              <Form.Control
+                type="text"
+                value={natgeoScoreColumn}
+                onChange={e => setNatgeoScoreColumn(e.target.value)}
+                placeholder="Ej. Average Score"
+              />
+            </Form.Group>
+            {natgeoImportError && (
+              <div role="alert" style={{ color: '#DC2626', fontSize: 13, marginTop: 12 }}>
+                {natgeoImportError}
+              </div>
+            )}
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" type="button" onClick={() => setShowNatgeoColumnModal(false)}>
+              Cancelar
+            </Button>
+            <button type="submit" className="btn btn-primary-custom">
+              Buscar campos
+            </button>
+          </Modal.Footer>
+        </Form>
+      </Modal>
 
       {/* NatGeo import result modal */}
       <Modal show={!!natgeoImportResult} onHide={() => setNatgeoImportResult(null)} centered size="md">
@@ -853,8 +1084,47 @@ const Grades = () => {
             }}>
               <span>⚠️</span><span>{natgeoImportResult.error}</span>
             </div>
-          ) : (
+          ) : natgeoImportResult ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{
+                padding: '10px 12px',
+                background: 'var(--bg-main)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                fontSize: 12,
+                color: 'var(--text-secondary)'
+              }}>
+                <div><strong>Clase comparada:</strong> {natgeoImportResult.className}</div>
+                <div><strong>Columna de nombres:</strong> {natgeoImportResult.nameColumn}</div>
+                <div><strong>Columna de calificaciones:</strong> {natgeoImportResult.scoreColumn}</div>
+              </div>
+              {natgeoImportResult.diagnostics?.length > 0 && (
+                <details open>
+                  <summary style={{ cursor: 'pointer', fontSize: 13, fontWeight: 700, marginBottom: 8 }}>
+                    Diagnóstico de comparación ({natgeoImportResult.diagnostics.length} filas)
+                  </summary>
+                  <div style={{ maxHeight: 240, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+                    {natgeoImportResult.diagnostics.map((item, index) => (
+                      <div key={`${item.excelName}-${index}`} style={{
+                        padding: '8px 10px',
+                        borderBottom: index < natgeoImportResult.diagnostics.length - 1 ? '1px solid var(--border)' : 'none',
+                        fontSize: 12
+                      }}>
+                        <div style={{ fontWeight: 600, color: item.matchedStudent ? 'var(--text-primary)' : '#D97706' }}>
+                          {item.matchedStudent ? 'Encontrado' : 'No encontrado'}: {item.excelName}
+                        </div>
+                        <div style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
+                          Normalizado: {item.normalizedExcelName || '(vacío)'}
+                        </div>
+                        <div style={{ color: 'var(--text-secondary)', overflowWrap: 'anywhere' }}>
+                          Alumno de la clase: {item.matchedStudent || '(sin coincidencia)'}
+                          {item.normalizedMatchedName ? ` — ${item.normalizedMatchedName}` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
               {/* matched */}
               <div style={{
                 background: '#10B98108',
@@ -933,7 +1203,7 @@ const Grades = () => {
                 </div>
               )}
             </div>
-          )}
+          ) : null}
         </Modal.Body>
         <Modal.Footer style={{ borderTop: '1px solid var(--border)', padding: '12px 24px' }}>
           <button className="btn btn-outline-custom" onClick={() => setNatgeoImportResult(null)}>
@@ -945,13 +1215,12 @@ const Grades = () => {
               style={{ background: '#3B82F6', borderColor: '#3B82F6' }}
               onClick={() => {
                 const { pendingUpdates, criterionId } = natgeoImportResult
-                setLocalGrades(prev => {
-                  const next = { ...prev }
-                  Object.entries(pendingUpdates).forEach(([studentId, score]) => {
-                    next[studentId] = { ...next[studentId], [criterionId]: score }
-                  })
-                  return next
+                const next = { ...localGradesRef.current }
+                Object.entries(pendingUpdates).forEach(([studentId, score]) => {
+                  next[studentId] = { ...next[studentId], [criterionId]: score }
                 })
+                localGradesRef.current = next
+                setLocalGrades(next)
                 setSaved(false)
                 setNatgeoImportResult(null)
               }}
